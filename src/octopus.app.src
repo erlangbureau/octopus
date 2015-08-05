@@ -1,0 +1,13 @@
+{application, octopus, [
+	{description, ""},
+	{vsn, "1.0.0"},
+	{id, "git"},
+	{modules, []},
+	{registered, []},
+	{applications, [
+		kernel,
+		stdlib
+	]},
+	{mod, {octopus_app, []}},
+	{env, []}
+]}.
