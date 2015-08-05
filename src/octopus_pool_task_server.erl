@@ -50,7 +50,6 @@ worker_lockin(PoolId) ->
 
 %% gen_server callbacks
 init([PoolId]) ->
-    io:format("Task server for pool:~p started~n", [PoolId]),
     {PoolId, PoolOpts, _WorkerOpts} = octopus:get_pool_config(PoolId),
     WorkerInit = proplists:get_value(worker_init, PoolOpts, sync),
     {ok, #state{pool_id = PoolId, worker_init = WorkerInit}}.

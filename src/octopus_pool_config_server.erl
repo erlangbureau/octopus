@@ -28,7 +28,6 @@ config_change(PoolId, Opts) ->
 
 %% gen_server callbacks
 init([PoolId]) ->
-    io:format("Config Server for pool:~p started~n", [PoolId]),
     ok = octopus_namespace:register({?MODULE, PoolId}),
     ok = config_change(PoolId, []),
     {ok, #state{pool_id = PoolId, pool_opts = [{pool_size, 0}]}}.
