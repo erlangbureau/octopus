@@ -8,17 +8,34 @@
 -export([init/1]).
 
 %% API
+-spec start_link(PoolId) -> {ok, Pid}
+when
+    PoolId  :: atom(),
+    Pid     :: pid().
+
 start_link(PoolId) ->
-	supervisor:start_link(?MODULE, [PoolId]).
+    supervisor:start_link(?MODULE, [PoolId]).
+
 
 %% supervisor callbacks
+-spec init(Opts) -> {ok, {Strategy, MaxR, MaxT}, [ChildSpec]}
+when
+    Opts        :: list(),
+    Strategy    :: supervisor:strategy(),
+    MaxR        :: non_neg_integer(),
+    MaxT        :: pos_integer(),
+    ChildSpec   :: supervisor:child_spec().
+
 init([PoolId]) ->
     Procs = [
-        {octopus_pool_workers_sup, {octopus_pool_workers_sup, start_link, [PoolId]},
-		    transient, infinity, supervisor, [octopus_pool_workers_sup]},
-        {octopus_pool_config_server, {octopus_pool_config_server, start_link, [PoolId]},
-		    transient, infinity, worker, [octopus_pool_config_server]},
-        {octopus_pool_task_server, {octopus_pool_task_server, start_link, [PoolId]},
-		    transient, infinity, worker, [octopus_pool_task_server]}
+        {octopus_pool_workers_sup,
+            {octopus_pool_workers_sup, start_link, [PoolId]},
+            transient, infinity, supervisor, [octopus_pool_workers_sup]},
+        {octopus_pool_config_server,
+            {octopus_pool_config_server, start_link, [PoolId]},
+            transient, 1000, worker, [octopus_pool_config_server]},
+        {octopus_pool_task_server,
+            {octopus_pool_task_server, start_link, [PoolId]},
+            transient, 1000, worker, [octopus_pool_task_server]}
     ],
-	{ok, {{one_for_all, 1, 5}, Procs}}.
+    {ok, {{one_for_all, 5, 1}, Procs}}.

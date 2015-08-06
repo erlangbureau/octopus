@@ -17,23 +17,66 @@
 }).
 
 %% API
--spec start_link(atom()) -> {ok, pid()}.
+-spec start_link(PoolId) -> {ok, Pid}
+when
+    PoolId  :: atom(),
+    Pid     :: pid().
+
 start_link(PoolId) ->
     gen_server:start_link(?MODULE, [PoolId], []).
 
-%% API
+
+-spec config_change(PoolId, Opts) -> ok
+when
+    PoolId  :: atom(),
+    Opts    :: proplists:proplist().
+
 config_change(PoolId, Opts) ->
     {ok, ConfigServerPid} = octopus_namespace:lookup({?MODULE, PoolId}),
     gen_server:cast(ConfigServerPid, {config_change, Opts}).
 
 %% gen_server callbacks
+-spec init(Opts) -> {ok, State} |
+                    {ok, State, Timeout} |
+                    ignore |
+                    {stop, Reason}
+when
+    Opts    :: list(),
+    State   :: term(),
+    Timeout :: timeout(),
+    Reason  :: term().
+
 init([PoolId]) ->
     ok = octopus_namespace:register({?MODULE, PoolId}),
     ok = config_change(PoolId, []),
     {ok, #state{pool_id = PoolId, pool_opts = [{pool_size, 0}]}}.
 
+
+-spec handle_call(Request, From, State) ->  {reply, Reply, State} |
+                                            {reply, Reply, State, Timeout} |
+                                            {noreply, State} |
+                                            {noreply, State, Timeout} |
+                                            {stop, Reason, Reply, State}
+when
+    Request :: term(),
+    From    :: {pid(), term()},
+    State   :: term(),
+    Reply   :: term(),
+    Timeout :: timeout(),
+    Reason  :: normal | shutdown.
+
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
+
+
+-spec handle_cast(Request, State) ->    {noreply, State} |
+                                        {noreply, State, Timeout} |
+                                        {stop, Reason, State}
+when
+    Request :: term(),
+    State   :: term(),
+    Timeout :: timeout(),
+    Reason  :: normal | shutdown.
 
 handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
         pool_opts = OldPoolOpts, worker_opts = OldWorkerOpts}) ->
@@ -59,11 +102,34 @@ handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+
+-spec handle_info(Request, State) ->    {noreply, State} |
+                                        {noreply, State, Timeout} |
+                                        {stop, Reason, State}
+when
+    Request :: term(),
+    State   :: term(),
+    Timeout :: timeout(),
+    Reason  :: normal | shutdown.
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
+
+-spec terminate(Reason, State) -> ok
+when
+    Reason  :: term(),
+    State   :: term().
+
 terminate(_Reason, _State) ->
     ok.
+
+-spec code_change(OldVsn, State, Extra) -> {ok, State} | {error, Reason}
+when
+    OldVsn  :: term() | {down, term()},
+    State   :: term(),
+    Extra   :: term(),
+    Reason  :: term().
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.

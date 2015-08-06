@@ -12,13 +12,15 @@ Getting Started
 1> octopus:start_pool(test_pool, [{pool_size, 3}, {worker, jamdb_sybase}], Opts).
 ok
 
-%% Execute task
-2> {ok, Pid} = octopus:worker_lockout(test_pool),
+2> {ok, Pid} = octopus:worker_lockout(test_pool).
 {ok,<0.120.0>}
+
+%% Execute task
 3> jamdb_sybase:sql_query(Pid, "select 1 as one, 2 as two, 3 as three") end).
 {ok,[{result_set,[<<"one">>,<<"two">>,<<"three">>],
                  [],
                  [[1,2,3]]}]}
+
 4> octopus:worker_lockin(test_pool).
 ok
 
