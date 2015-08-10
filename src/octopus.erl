@@ -6,6 +6,7 @@
 -export([perform/2]).
 -export([get_env/2, set_env/2]).
 -export([get_pool_config/1, set_pool_config/3, set_pool_config/4]).
+-export([pool_info/1, pool_info/2]).
 
 %% API
 -spec start_pool(PoolId, PoolOpts, WorkerOpts) -> ok | {error, Reason}
@@ -33,6 +34,24 @@ stop_pool(PoolId) ->
     _ = octopus_sup:stop_pool(PoolId),
     _ = delete_pool_config(PoolId),
     ok.
+
+
+-spec pool_info(PoolId) -> [{Item, non_neg_integer()}]
+when
+    PoolId      :: atom(),
+    Item    :: init | ready | busy.
+
+pool_info(PoolId) ->
+    octopus_pool_task_server:pool_info(PoolId).
+
+
+-spec pool_info(PoolId, Item) -> {Item, non_neg_integer()}
+when
+    PoolId  :: atom(),
+    Item    :: init | ready | busy.
+
+pool_info(PoolId, Item) ->
+    octopus_pool_task_server:pool_info(PoolId, Item).
 
 
 -spec worker_lockout(PoolId) -> {ok, Pid} | {error, Reason}

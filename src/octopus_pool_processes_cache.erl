@@ -1,4 +1,4 @@
--module(octopus_namespace).
+-module(octopus_pool_processes_cache).
 
 %% API
 -export([init/0]).

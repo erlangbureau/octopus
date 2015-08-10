@@ -32,8 +32,8 @@ when
     Opts    :: proplists:proplist().
 
 config_change(PoolId, Opts) ->
-    {ok, ConfigServerPid} = octopus_namespace:lookup({?MODULE, PoolId}),
-    gen_server:cast(ConfigServerPid, {config_change, Opts}).
+    {ok, ServerPid} = octopus_pool_processes_cache:lookup({?MODULE, PoolId}),
+    gen_server:cast(ServerPid, {config_change, Opts}).
 
 %% gen_server callbacks
 -spec init(Opts) -> {ok, State} |
@@ -47,7 +47,7 @@ when
     Reason  :: term().
 
 init([PoolId]) ->
-    ok = octopus_namespace:register({?MODULE, PoolId}),
+    ok = octopus_pool_processes_cache:register({?MODULE, PoolId}),
     ok = config_change(PoolId, []),
     {ok, #state{pool_id = PoolId, pool_opts = [{pool_size, 0}]}}.
 

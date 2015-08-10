@@ -3,10 +3,12 @@
 
 %% API
 -export([start_link/1]).
+-export([worker_start/2]).
 -export([worker_init/2]).
 -export([worker_ready/2]).
 -export([worker_lockout/1]).
 -export([worker_lockin/1]).
+-export([pool_info/1, pool_info/2]).
 
 %% gen_server callbacks
 -export([init/1, terminate/2]).
@@ -15,11 +17,10 @@
 
 -record(state, {
     pool_id,
-    worker_init = sync,
-    workers_init = [],
-    workers_ready = [],
-    workers_busy = []
+    init_type = sync
 }).
+
+-define(DEF_INIT_TYPE, sync).
 
 %% API
 -spec start_link(PoolId) -> {ok, Pid}
@@ -31,7 +32,7 @@ start_link(PoolId) ->
     gen_server:start_link({local, PoolId}, ?MODULE, [PoolId], []).
 
 
--spec worker_init(PoolId, WorkerId) ->  {pk, Pid} |
+-spec worker_start(PoolId, WorkerId) ->  {pk, Pid} |
                                         {ok, Pid, Extra} |
                                         {error, Reason} |
                                         term()
@@ -41,19 +42,28 @@ when
     Extra       :: term(),
     Reason      :: term().
 
-worker_init(PoolId, WorkerId) ->
+
+worker_start(PoolId, WorkerId) ->
     {WorkerModule, WorkerOpts} = get_worker_config(PoolId, WorkerId),
     case apply(WorkerModule, start_link, [WorkerOpts]) of
         {ok, Pid} when is_pid(Pid) ->
-            _ = PoolId ! {init, WorkerId, Pid},
+            _ = PoolId ! {start, WorkerId, Pid},
             {ok, Pid};
         {ok, Pid, Extra} when is_pid(Pid) ->
-            _ = PoolId ! {init, WorkerId, Pid},
+            _ = PoolId ! {start, WorkerId, Pid},
             {ok, Pid, Extra};
         Other ->
             Other
     end.
 
+-spec worker_init(PoolId, WorkerId) -> ok
+when
+    PoolId      :: atom(),
+    WorkerId    :: term().
+
+worker_init(PoolId, WorkerId) ->
+    _ = PoolId ! {init, WorkerId},
+    ok.
 
 -spec worker_ready(PoolId, WorkerId) -> ok
 when
@@ -80,6 +90,22 @@ when
 worker_lockin(PoolId) ->
     gen_server:cast(PoolId, {worker_lockin, self()}).
 
+-spec pool_info(PoolId) -> [{Item, non_neg_integer()}]
+when
+    PoolId      :: atom(),
+    Item    :: init | ready | busy.
+
+pool_info(PoolId) ->
+    gen_server:call(PoolId, pool_info).
+
+-spec pool_info(PoolId, Item) -> {Item, non_neg_integer()}
+when
+    PoolId  :: atom(),
+    Item    :: init | ready | busy.
+
+pool_info(PoolId, Item) when Item =:= init; Item =:= ready; Item =:= busy ->
+    ItemList = octopus_pool_workers_cache:lookup({PoolId, Item}),
+    {Item, length(ItemList)}.
 
 %% gen_server callbacks
 -spec init(Opts) -> {ok, State} |
@@ -94,8 +120,8 @@ when
 
 init([PoolId]) ->
     {PoolId, PoolOpts, _WorkerOpts} = octopus:get_pool_config(PoolId),
-    WorkerInit = proplists:get_value(worker_init, PoolOpts, sync),
-    {ok, #state{pool_id = PoolId, worker_init = WorkerInit}}.
+    InitType = proplists:get_value(init_type, PoolOpts, ?DEF_INIT_TYPE),
+    {ok, #state{pool_id = PoolId, init_type = InitType}}.
 
 
 -spec handle_call(Request, From, State) ->  {reply, Reply, State} |
@@ -111,23 +137,31 @@ when
     Timeout :: timeout(),
     Reason  :: normal | shutdown.
 
-handle_call(worker_lockout, {From, _}, #state{workers_ready = WorkersReady,
-        workers_busy = WorkersBusy} = State) ->
-    WorkersReady2 = lists:reverse(WorkersReady),
-    case WorkersReady2 of
-        [{WorkerId, Pid}|WorkersReady3] ->
+handle_call(worker_lockout, {From, _}, #state{pool_id = PoolId} = State) ->
+    Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
+    Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
+    Ready2 = lists:reverse(Ready),
+    case Ready2 of
+        [{WorkerId, Pid}|Ready3] ->
             _ = erlang:monitor(process, From),
-            WorkersReady4 = lists:reverse(WorkersReady3),
-            WorkersBusy2 = lists:keystore(
-                WorkerId, 1, WorkersBusy, {WorkerId, Pid, From}),
-            State2 = State#state{
-                workers_ready = WorkersReady4,
-                workers_busy = WorkersBusy2
-            },
-            {reply, {ok, Pid}, State2};
+            Ready4 = lists:reverse(Ready3),
+            Busy2 = lists:keystore(WorkerId, 1, Busy, {WorkerId, Pid, From}),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready4),
+            ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2),
+            {reply, {ok, Pid}, State};
         [] ->
             {reply, {error, no_workers}, State}
     end;
+handle_call(pool_info, _From, #state{pool_id = PoolId} = State) ->
+    Init = octopus_pool_workers_cache:lookup({PoolId, init}),
+    Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
+    Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
+    PoolInfo = [
+        {init, length(Init)},
+        {ready, length(Ready)},
+        {busy, length(Busy)}
+    ],
+    {reply, PoolInfo, State};
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
 
@@ -141,17 +175,14 @@ when
     Timeout :: timeout(),
     Reason  :: normal | shutdown.
 
-handle_cast({worker_lockin, From}, #state{workers_ready = WorkersReady,
-        workers_busy = WorkersBusy} = State) ->
-    {value, Tuple, WorkersBusy2} = lists:keytake(From, 3, WorkersBusy),
-    {WorkerId, Pid, From} = Tuple,
-    WorkersReady2 = lists:keystore(
-        WorkerId, 1, WorkersReady, {WorkerId, Pid}),
-    State2 = State#state{
-        workers_ready = WorkersReady2,
-        workers_busy = WorkersBusy2
-    },
-    {noreply, State2};
+handle_cast({worker_lockin, From}, #state{pool_id = PoolId} = State) ->
+    Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
+    Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
+    {value, {WorkerId, Pid, From}, Busy2} = lists:keytake(From, 3, Busy),
+    Ready2 = lists:keystore(WorkerId, 1, Ready, {WorkerId, Pid}),
+    ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
+    ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -165,61 +196,66 @@ when
     Timeout :: timeout(),
     Reason  :: normal | shutdown.
 
-handle_info({init, WorkerId, Pid}, #state{worker_init = WorkerInit,
-        workers_init = WorkersInit, workers_ready = WorkersReady} = State) ->
+handle_info({start, WorkerId, Pid}, #state{pool_id = PoolId,
+        init_type = InitType} = State) ->
     _ = erlang:monitor(process, Pid),
-    State2 = case WorkerInit of
+    Init = octopus_pool_workers_cache:lookup({PoolId, init}),
+    Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
+    case InitType of
         sync ->
-            WorkersReady2 = lists:keystore(
-                WorkerId, 1, WorkersReady, {WorkerId, Pid}),
-            State#state{workers_ready = WorkersReady2};
+            Ready2 = lists:keystore(WorkerId, 1, Ready, {WorkerId, Pid}),
+            _ = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2);
         async ->
-            WorkersReady2 = lists:keydelete(WorkerId, 1, WorkersReady),
-            WorkersInit2 = lists:keystore(
-                WorkerId, 1, WorkersInit, {WorkerId, Pid}),
-            State#state{
-                workers_init = WorkersInit2,
-                workers_ready = WorkersReady2
-            }
+            Ready2 = lists:keydelete(WorkerId, 1, Ready),
+            Init2 = lists:keystore(WorkerId, 1, Init, {WorkerId, Pid}),
+            ok = octopus_pool_workers_cache:insert({PoolId, init}, Init2),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2)
     end,
-    {noreply, State2};
-handle_info({ready, WorkerId}, #state{workers_init = WorkersInit,
-        workers_ready = WorkersReady} = State) ->
-    WorkersInit2 = lists:keytake(WorkerId, 1, WorkersInit),
-    State2 = case lists:keytake(WorkerId, 1, WorkersInit) of
-        {value, Tuple, WorkersInit2} ->
-            WorkersReady2 = lists:keystore(WorkerId, 1, WorkersReady, Tuple),
-            State#state{
-                workers_init = WorkersInit2,
-                workers_ready = WorkersReady2
-            };
+    {noreply, State};
+handle_info({init, WorkerId}, #state{pool_id = PoolId} = State) ->
+    Init = octopus_pool_workers_cache:lookup({PoolId, init}),
+    Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
+    case lists:keytake(WorkerId, 1, Ready) of
+        {value, Tuple, Ready2} ->
+            Init2 = lists:keystore(WorkerId, 1, Init, Tuple),
+            ok = octopus_pool_workers_cache:insert({PoolId, init}, Init2),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2);
         false ->
-            State
+            ok
     end,
-    {noreply, State2};
-handle_info({'DOWN', _MonitorRef, process, Pid, _Info}, #state{
-        workers_init = WorkersInit, workers_ready = WorkersReady,
-        workers_busy = WorkersBusy} = State) ->
-    State2 = case lists:keytake(Pid, 3, WorkersBusy) of
-        {value, Tuple, WorkersBusy2} ->
+    {noreply, State};
+handle_info({ready, WorkerId}, #state{pool_id = PoolId} = State) ->
+    Init = octopus_pool_workers_cache:lookup({PoolId, init}),
+    Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
+    case lists:keytake(WorkerId, 1, Init) of
+        {value, Tuple, Init2} ->
+            Ready2 = lists:keystore(WorkerId, 1, Ready, Tuple),
+            ok = octopus_pool_workers_cache:insert({PoolId, init}, Init2),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2);
+        false ->
+            ok
+    end,
+    {noreply, State};
+handle_info({'DOWN', _MonitorRef, process, Pid, _Info},
+        #state{pool_id = PoolId} = State) ->
+    Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
+    Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
+    case lists:keytake(Pid, 3, Busy) of
+        {value, Tuple, Busy2} ->
             {WorkerId, WorkerPid, Pid} = Tuple,
-            WorkersReady2 = lists:keystore(
-                WorkerId, 1, WorkersReady, {WorkerId, WorkerPid}),
-            State#state{
-                workers_ready = WorkersReady2,
-                workers_busy = WorkersBusy2
-            };
+            Ready2 = lists:keystore(WorkerId, 1, Ready, {WorkerId, WorkerPid}),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
+            ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2);
         false ->
-            WorkersInit2 = lists:keydelete(Pid, 2, WorkersInit),
-            WorkersReady2 = lists:keydelete(Pid, 2, WorkersReady),
-            WorkersBusy2 = lists:keydelete(Pid, 2, WorkersBusy),
-            State#state{
-                workers_init = WorkersInit2,
-                workers_ready = WorkersReady2,
-                workers_busy = WorkersBusy2
-            }
+            Init = octopus_pool_workers_cache:lookup({PoolId, init}),
+            Init2 = lists:keydelete(Pid, 2, Init),
+            Ready2 = lists:keydelete(Pid, 2, Ready),
+            Busy2 = lists:keydelete(Pid, 2, Busy),
+            ok = octopus_pool_workers_cache:insert({PoolId, init}, Init2),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
+            ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2)
     end,
-    {noreply, State2};
+    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -246,12 +282,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% internal
 get_worker_config(PoolId, WorkerId) ->
     {PoolId, PoolOpts, WorkerOpts} = octopus:get_pool_config(PoolId),
-    InitType = proplists:get_value(init_type, PoolOpts, sync),
+    InitType = proplists:get_value(init_type, PoolOpts, ?DEF_INIT_TYPE),
     WorkerModule = proplists:get_value(worker, PoolOpts),
     WorkerOpts2 = [
         {pool_id, PoolId},
         {worker_id, WorkerId},
         {init_type, InitType},
-        {ready_callback, {?MODULE, ready, [PoolId, WorkerId]}}
+        {init_callback, {?MODULE, worker_init, [PoolId, WorkerId]}},
+        {ready_callback, {?MODULE, worker_ready, [PoolId, WorkerId]}}
         |WorkerOpts],
     {WorkerModule, WorkerOpts2}.

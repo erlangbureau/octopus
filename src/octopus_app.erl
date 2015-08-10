@@ -17,7 +17,8 @@ when
     Reason      :: term().
 
 start(_StartType, _StartArgs) ->
-    ok = octopus_namespace:init(),
+    ok = octopus_pool_processes_cache:init(),
+    ok = octopus_pool_workers_cache:init(),
     octopus_sup:start_link().
 
 
