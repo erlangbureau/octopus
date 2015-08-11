@@ -1,6 +1,8 @@
 Octopus
 ============
 
+[![Join the chat at https://gitter.im/erlangbureau/octopus](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/erlangbureau/octopus?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Octopus is a small and flexible pool manager written in Erlang.
 
 Getting Started
