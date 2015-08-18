@@ -44,8 +44,8 @@ when
 
 
 worker_start(PoolId, WorkerId) ->
-    {WorkerModule, WorkerOpts} = get_worker_config(PoolId, WorkerId),
-    case apply(WorkerModule, start_link, [WorkerOpts]) of
+    {WorkerModule, WorkerArgs} = get_worker_config(PoolId, WorkerId),
+    case apply(WorkerModule, start_link, WorkerArgs) of
         {ok, Pid} when is_pid(Pid) ->
             _ = PoolId ! {start, WorkerId, Pid},
             {ok, Pid};
@@ -119,7 +119,7 @@ when
     Reason  :: term().
 
 init([PoolId]) ->
-    {PoolId, PoolOpts, _WorkerOpts} = octopus:get_pool_config(PoolId),
+    {PoolId, PoolOpts, _WorkerArgs} = octopus:get_pool_config(PoolId),
     InitType = proplists:get_value(init_type, PoolOpts, ?DEF_INIT_TYPE),
     {ok, #state{pool_id = PoolId, init_type = InitType}}.
 
@@ -283,13 +283,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% internal
 get_worker_config(PoolId, WorkerId) ->
-    {PoolId, PoolOpts, WorkerOpts} = octopus:get_pool_config(PoolId),
+    {PoolId, PoolOpts, WorkerArgs} = octopus:get_pool_config(PoolId),
     InitType = proplists:get_value(init_type, PoolOpts, ?DEF_INIT_TYPE),
     WorkerModule = proplists:get_value(worker, PoolOpts),
     case InitType of
         sync ->
-            {WorkerModule, WorkerOpts};
+            {WorkerModule, WorkerArgs};
         async ->
+            [WorkerOpts] = WorkerArgs,
             WorkerOpts2 = [
                 {pool_id, PoolId},
                 {worker_id, WorkerId},
@@ -297,5 +298,5 @@ get_worker_config(PoolId, WorkerId) ->
                 {init_callback, {?MODULE, worker_init, [PoolId, WorkerId]}},
                 {ready_callback, {?MODULE, worker_ready, [PoolId, WorkerId]}}
             |WorkerOpts],
-            {WorkerModule, WorkerOpts2}
+            {WorkerModule, [WorkerOpts2]}
     end.

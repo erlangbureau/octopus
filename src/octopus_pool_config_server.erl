@@ -13,7 +13,7 @@
 -record(state, {
     pool_id,
     pool_opts = [],
-    worker_opts = []
+    worker_args = []
 }).
 
 %% API
@@ -79,9 +79,9 @@ when
     Reason  :: normal | shutdown.
 
 handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
-        pool_opts = OldPoolOpts, worker_opts = OldWorkerOpts}) ->
+        pool_opts = OldPoolOpts, worker_args = OldWorkerArgs}) ->
     State2 = case octopus:get_pool_config(PoolId) of
-        {PoolId, NewPoolOpts, NewWorkerOpts} ->
+        {PoolId, NewPoolOpts, NewWorkerArgs} ->
             OldPoolSize = proplists:get_value(pool_size, OldPoolOpts, 0),
             NewPoolSize = proplists:get_value(pool_size, NewPoolOpts, 0),
             %% PoolSizeChange
@@ -90,11 +90,11 @@ handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
             OldWorkerModule = proplists:get_value(worker, OldPoolOpts),
             NewWorkerModule = proplists:get_value(worker, NewPoolOpts),
             WorkerModuleChanged = NewWorkerModule =/= OldWorkerModule,
-            WorkerOptsChanged = NewWorkerOpts =/= OldWorkerOpts,
-            WorkerConfigChanged = WorkerModuleChanged orelse WorkerOptsChanged,
+            WorkerArgsChanged = NewWorkerArgs =/= OldWorkerArgs,
+            WorkerConfigChanged = WorkerModuleChanged orelse WorkerArgsChanged,
             _ = [octopus_pool_workers_sup:restart_worker(PoolId, WorkerId)
                 || WorkerId <- lists:seq(1, NewPoolSize), WorkerConfigChanged],
-            State#state{pool_opts = NewPoolOpts, worker_opts = NewWorkerOpts};
+            State#state{pool_opts = NewPoolOpts, worker_args = NewWorkerArgs};
         _ ->
             State
     end,

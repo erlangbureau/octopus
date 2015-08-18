@@ -9,19 +9,27 @@ Getting Started
 ```erl
 
 %% Start pool
-1> octopus:start_pool(test_pool, [{pool_size, 3}, {worker, jamdb_sybase}], Opts).
+1> Opts = [
+    {host, "jamdb-sybase-dev.erlangbureau.dp.ua"},
+    {port, 5000},
+    {user, "jamdbtest"},
+    {password, "jamdbtest"},
+    {database, "jamdbtest"}
+].
+
+2> octopus:start_pool(test_pool, [{pool_size, 3}, {worker, jamdb_sybase}], [Opts]).
 ok
 
-2> {ok, Pid} = octopus:worker_lockout(test_pool).
+3> {ok, Pid} = octopus:worker_lockout(test_pool).
 {ok,<0.120.0>}
 
 %% Execute task
-3> jamdb_sybase:sql_query(Pid, "select 1 as one, 2 as two, 3 as three").
+4> jamdb_sybase:sql_query(Pid, "select 1 as one, 2 as two, 3 as three").
 {ok,[{result_set,[<<"one">>,<<"two">>,<<"three">>],
                  [],
                  [[1,2,3]]}]}
 
-4> octopus:worker_lockin(test_pool).
+5> octopus:worker_lockin(test_pool).
 ok
 
 ```

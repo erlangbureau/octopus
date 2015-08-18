@@ -10,16 +10,16 @@
 -export([map/2, reduce/3]).
 
 %% API
--spec start_pool(PoolId, PoolOpts, WorkerOpts) -> ok | {error, Reason}
+-spec start_pool(PoolId, PoolOpts, WorkerArgs) -> ok | {error, Reason}
 when
     PoolId      :: atom(),
     PoolOpts    :: proplists:proplist(),
-    WorkerOpts  :: proplists:proplist(),
+    WorkerArgs  :: proplists:proplist(),
     Reason      :: term().
 
-start_pool(PoolId, PoolOpts, WorkerOpts) when
-        is_list(PoolOpts), is_list(WorkerOpts) ->
-    ok = add_pool_config(PoolId, PoolOpts, WorkerOpts),
+start_pool(PoolId, PoolOpts, WorkerArgs) when
+        is_list(PoolOpts), is_list(WorkerArgs) ->
+    ok = add_pool_config(PoolId, PoolOpts, WorkerArgs),
     case octopus_sup:start_pool(PoolId) of
         {ok, _Pid}                          -> ok;
         {ok, _Pid, _Info}                   -> ok;
@@ -104,25 +104,25 @@ get_pool_config(PoolId) ->
     lists:keyfind(PoolId, 1, Pools).
 
 
--spec set_pool_config(PoolId, PoolOpts, WorkerOpts) -> ok
+-spec set_pool_config(PoolId, PoolOpts, WorkerArgs) -> ok
 when
     PoolId      :: atom(),
     PoolOpts    :: proplists:proplist(),
-    WorkerOpts  :: proplists:proplist().
+    WorkerArgs  :: proplists:proplist().
 
-set_pool_config(PoolId, PoolOpts, WorkerOpts) ->
-    set_pool_config(PoolId, PoolOpts, WorkerOpts, []).
+set_pool_config(PoolId, PoolOpts, WorkerArgs) ->
+    set_pool_config(PoolId, PoolOpts, WorkerArgs, []).
 
 
--spec set_pool_config(PoolId, PoolOpts, WorkerOpts, ChangeOpts) -> ok
+-spec set_pool_config(PoolId, PoolOpts, WorkerArgs, ChangeOpts) -> ok
 when
     PoolId      :: atom(),
     PoolOpts    :: proplists:proplist(),
-    WorkerOpts  :: proplists:proplist(),
+    WorkerArgs  :: proplists:proplist(),
     ChangeOpts  :: proplists:proplist().
 
-set_pool_config(PoolId, PoolOpts, WorkerOpts, ChangeOpts) ->
-    ok = add_pool_config(PoolId, PoolOpts, WorkerOpts),
+set_pool_config(PoolId, PoolOpts, WorkerArgs, ChangeOpts) ->
+    ok = add_pool_config(PoolId, PoolOpts, WorkerArgs),
     octopus_pool_config_server:config_change(PoolId, ChangeOpts).
 
 
@@ -165,9 +165,9 @@ reduce(GroupId, Fun, InitState) ->
     lists:foldl(Fun, InitState, PoolList).
 
 %% internal
-add_pool_config(PoolId, PoolOpts, WorkerOpts) ->
+add_pool_config(PoolId, PoolOpts, WorkerArgs) ->
     Pools = get_env(pools, []),
-    PoolCfg = {PoolId, PoolOpts, WorkerOpts},
+    PoolCfg = {PoolId, PoolOpts, WorkerArgs},
     Pools2 = lists:keystore(PoolId, 1, Pools, PoolCfg),
     set_env(pools, [PoolCfg|Pools2]).
 
