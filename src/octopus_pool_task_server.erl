@@ -140,13 +140,11 @@ when
 handle_call(worker_lockout, {From, _}, #state{pool_id = PoolId} = State) ->
     Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
     Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
-    Ready2 = lists:reverse(Ready),
-    case Ready2 of
-        [{WorkerId, Pid}|Ready3] ->
+    case Ready of
+        [{WorkerId, Pid}|Ready2] ->
             _ = erlang:monitor(process, From),
-            Ready4 = lists:reverse(Ready3),
             Busy2 = lists:keystore(WorkerId, 1, Busy, {WorkerId, Pid, From}),
-            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready4),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
             ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2),
             {reply, {ok, Pid}, State};
         [] ->
@@ -178,10 +176,14 @@ when
 handle_cast({worker_lockin, From}, #state{pool_id = PoolId} = State) ->
     Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
     Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
-    {value, {WorkerId, Pid, From}, Busy2} = lists:keytake(From, 3, Busy),
-    Ready2 = lists:keystore(WorkerId, 1, Ready, {WorkerId, Pid}),
-    ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
-    ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2),
+    case lists:keytake(From, 3, Busy) of
+        {value, {WorkerId, Pid, From}, Busy2} ->
+            Ready2 = lists:keystore(WorkerId, 1, Ready, {WorkerId, Pid}),
+            ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
+            ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2);
+        false ->
+            ok
+    end,
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -284,11 +286,16 @@ get_worker_config(PoolId, WorkerId) ->
     {PoolId, PoolOpts, WorkerOpts} = octopus:get_pool_config(PoolId),
     InitType = proplists:get_value(init_type, PoolOpts, ?DEF_INIT_TYPE),
     WorkerModule = proplists:get_value(worker, PoolOpts),
-    WorkerOpts2 = [
-        {pool_id, PoolId},
-        {worker_id, WorkerId},
-        {init_type, InitType},
-        {init_callback, {?MODULE, worker_init, [PoolId, WorkerId]}},
-        {ready_callback, {?MODULE, worker_ready, [PoolId, WorkerId]}}
-        |WorkerOpts],
-    {WorkerModule, WorkerOpts2}.
+    case InitType of
+        sync ->
+            {WorkerModule, WorkerOpts};
+        async ->
+            WorkerOpts2 = [
+                {pool_id, PoolId},
+                {worker_id, WorkerId},
+                {init_type, InitType},
+                {init_callback, {?MODULE, worker_init, [PoolId, WorkerId]}},
+                {ready_callback, {?MODULE, worker_ready, [PoolId, WorkerId]}}
+            |WorkerOpts],
+            {WorkerModule, WorkerOpts2}
+    end.

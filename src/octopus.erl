@@ -4,9 +4,10 @@
 -export([start_pool/3, stop_pool/1]).
 -export([worker_lockout/1, worker_lockin/1]).
 -export([perform/2]).
--export([get_env/2, set_env/2]).
 -export([get_pool_config/1, set_pool_config/3, set_pool_config/4]).
 -export([pool_info/1, pool_info/2]).
+-export([get_group/1, set_group/2]).
+-export([map/2, reduce/3]).
 
 %% API
 -spec start_pool(PoolId, PoolOpts, WorkerOpts) -> ok | {error, Reason}
@@ -16,7 +17,8 @@ when
     WorkerOpts  :: proplists:proplist(),
     Reason      :: term().
 
-start_pool(PoolId, PoolOpts, WorkerOpts) ->
+start_pool(PoolId, PoolOpts, WorkerOpts) when
+        is_list(PoolOpts), is_list(WorkerOpts) ->
     ok = add_pool_config(PoolId, PoolOpts, WorkerOpts),
     case octopus_sup:start_pool(PoolId) of
         {ok, _Pid}                          -> ok;
@@ -92,35 +94,13 @@ perform(PoolId, Fun) ->
     end.
 
 
--spec get_env(Key, Default) -> Value
-when
-    Key     :: atom(),
-    Default :: term(),
-    Value   :: term().
-
-get_env(Key, Default) ->
-    case application:get_env(?MODULE, Key) of
-        {ok, Value} -> Value;
-        undefined -> Default
-    end.
-
-
--spec set_env(Key, Value) -> ok
-when
-    Key     :: atom(),
-    Value   :: term().
-
-set_env(Key, Value) ->
-    application:set_env(?MODULE, Key, Value).
-
-
 -spec get_pool_config(PoolId) -> Tuple | false
 when
     PoolId  :: atom(),
     Tuple   :: tuple().
 
 get_pool_config(PoolId) ->
-    Pools = octopus:get_env(pools, []),
+    Pools = get_env(pools, []),
     lists:keyfind(PoolId, 1, Pools).
 
 
@@ -145,14 +125,62 @@ set_pool_config(PoolId, PoolOpts, WorkerOpts, ChangeOpts) ->
     ok = add_pool_config(PoolId, PoolOpts, WorkerOpts),
     octopus_pool_config_server:config_change(PoolId, ChangeOpts).
 
+
+-spec get_group(GroupId) -> PoolList when
+    GroupId     :: atom(),
+    PoolList    :: list().
+
+get_group(GroupId) ->
+    Groups = get_env(groups, []),
+    proplists:get_value(GroupId, Groups, []).
+
+
+-spec set_group(GroupId, PoolList) -> ok when
+    GroupId     :: atom(),
+    PoolList    :: list().
+
+set_group(GroupId, PoolList) ->
+    Groups = get_env(groups, []),
+    Groups2 = lists:keystore(GroupId, 1, Groups, {GroupId, PoolList}),
+    set_env(groups, Groups2).
+
+
+-spec map(GroupId, Fun) -> list() when
+    GroupId :: atom(),
+    PoolId  :: atom(),
+    Fun     :: fun((PoolId) -> term()).
+
+map(GroupId, Fun) ->
+    PoolList = get_group(GroupId),
+    [Fun(PoolId) || PoolId <- PoolList].
+
+-spec reduce(GroupId, Fun, InitState) -> term() when
+    GroupId     :: atom(),
+    PoolId      :: atom(),
+    InitState   :: term(),
+    Fun         :: fun((PoolId, InitState) -> term()).
+
+reduce(GroupId, Fun, InitState) ->
+    PoolList = get_group(GroupId),
+    lists:foldl(Fun, InitState, PoolList).
+
 %% internal
 add_pool_config(PoolId, PoolOpts, WorkerOpts) ->
-    Pools = octopus:get_env(pools, []),
+    Pools = get_env(pools, []),
     PoolCfg = {PoolId, PoolOpts, WorkerOpts},
     Pools2 = lists:keystore(PoolId, 1, Pools, PoolCfg),
-    octopus:set_env(pools, [PoolCfg|Pools2]).
+    set_env(pools, [PoolCfg|Pools2]).
 
 delete_pool_config(PoolId) ->
     Pools = get_env(pools, []),
     Pools2 = lists:keydelete(PoolId, 1, Pools),
-    octopus:set_env(pools, Pools2).
+    set_env(pools, Pools2).
+
+get_env(Key, Default) ->
+    case application:get_env(?MODULE, Key) of
+        {ok, Value} -> Value;
+        undefined -> Default
+    end.
+
+set_env(Key, Value) ->
+    application:set_env(?MODULE, Key, Value).

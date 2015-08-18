@@ -49,7 +49,7 @@ when
 init([PoolId]) ->
     ok = octopus_pool_processes_cache:register({?MODULE, PoolId}),
     ok = config_change(PoolId, []),
-    {ok, #state{pool_id = PoolId, pool_opts = [{pool_size, 0}]}}.
+    {ok, #state{pool_id = PoolId}}.
 
 
 -spec handle_call(Request, From, State) ->  {reply, Reply, State} |
@@ -82,8 +82,8 @@ handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
         pool_opts = OldPoolOpts, worker_opts = OldWorkerOpts}) ->
     State2 = case octopus:get_pool_config(PoolId) of
         {PoolId, NewPoolOpts, NewWorkerOpts} ->
-            OldPoolSize = proplists:get_value(pool_size, OldPoolOpts),
-            NewPoolSize = proplists:get_value(pool_size, NewPoolOpts),
+            OldPoolSize = proplists:get_value(pool_size, OldPoolOpts, 0),
+            NewPoolSize = proplists:get_value(pool_size, NewPoolOpts, 0),
             %% PoolSizeChange
             ok = pool_size_change(PoolId, OldPoolSize, NewPoolSize),
             %% WorkerConfigChange
