@@ -15,15 +15,16 @@ init() ->
 -spec insert(Key, Value) -> ok
 when
     Key     :: term(),
-    Value   :: term().
+    Value   :: [term()].
 
 insert(Key, Value) ->
     true = ets:insert(?MODULE, {Key, Value}),
     ok.
 
--spec lookup(Key) -> ok
+-spec lookup(Key) -> WorkersList
 when
-    Key     :: term().
+    Key         :: term(),
+    WorkersList :: [term()].
 
 lookup(Key) ->
     case ets:lookup(?MODULE, Key) of

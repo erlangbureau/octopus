@@ -47,7 +47,7 @@ pool_info(PoolId) ->
     octopus_pool_task_server:pool_info(PoolId).
 
 
--spec pool_info(PoolId, Item) -> {Item, non_neg_integer()}
+-spec pool_info(PoolId, Item) -> non_neg_integer()
 when
     PoolId  :: atom(),
     Item    :: init | ready | busy.

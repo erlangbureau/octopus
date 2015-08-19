@@ -74,10 +74,11 @@ worker_ready(PoolId, WorkerId) ->
     _ = PoolId ! {ready, WorkerId},
     ok.
 
--spec worker_lockout(PoolId) -> {ok, Pid}
+-spec worker_lockout(PoolId) -> {ok, Pid} | {error, Reason}
 when
     PoolId  :: atom(),
-    Pid     :: pid().
+    Pid     :: pid(),
+    Reason  :: term().
 
 worker_lockout(PoolId) ->
     gen_server:call(PoolId, worker_lockout).
@@ -98,14 +99,14 @@ when
 pool_info(PoolId) ->
     gen_server:call(PoolId, pool_info).
 
--spec pool_info(PoolId, Item) -> {Item, non_neg_integer()}
+-spec pool_info(PoolId, Item) -> non_neg_integer()
 when
     PoolId  :: atom(),
     Item    :: init | ready | busy.
 
 pool_info(PoolId, Item) when Item =:= init; Item =:= ready; Item =:= busy ->
     ItemList = octopus_pool_workers_cache:lookup({PoolId, Item}),
-    {Item, length(ItemList)}.
+    length(ItemList).
 
 %% gen_server callbacks
 -spec init(Opts) -> {ok, State} |

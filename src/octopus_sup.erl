@@ -40,9 +40,8 @@ stop_pool(PoolId) ->
 
 
 %% supervisor callbacks
--spec init(Opts) -> {ok, {Strategy, MaxR, MaxT}, [ChildSpec]}
+-spec init([]) -> {ok, {{Strategy, MaxR, MaxT}, [ChildSpec]}}
 when
-    Opts        :: list(),
     Strategy    :: supervisor:strategy(),
     MaxR        :: non_neg_integer(),
     MaxT        :: pos_integer(),
