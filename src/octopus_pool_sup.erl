@@ -31,11 +31,11 @@ init([PoolId]) ->
         {octopus_pool_workers_sup,
             {octopus_pool_workers_sup, start_link, [PoolId]},
             transient, infinity, supervisor, [octopus_pool_workers_sup]},
-        {octopus_pool_config_server,
-            {octopus_pool_config_server, start_link, [PoolId]},
-            transient, 1000, worker, [octopus_pool_config_server]},
         {octopus_pool_task_server,
             {octopus_pool_task_server, start_link, [PoolId]},
-            transient, 1000, worker, [octopus_pool_task_server]}
+            transient, 1000, worker, [octopus_pool_task_server]},
+        {octopus_pool_config_server,
+            {octopus_pool_config_server, start_link, [PoolId]},
+            transient, 1000, worker, [octopus_pool_config_server]}
     ],
     {ok, {{one_for_all, 5, 1}, Procs}}.

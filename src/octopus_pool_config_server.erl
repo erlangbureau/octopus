@@ -48,8 +48,18 @@ when
 
 init([PoolId]) ->
     ok = octopus_pool_processes_cache:register({?MODULE, PoolId}),
-    ok = config_change(PoolId, []),
-    {ok, #state{pool_id = PoolId}}.
+    State = case octopus:get_pool_config(PoolId) of
+        {PoolId, PoolOpts, WorkerArgs} ->
+            ok = config_change(PoolId, [], [], PoolOpts, WorkerArgs),
+            #state{
+                pool_id = PoolId,
+                pool_opts = PoolOpts,
+                worker_args = WorkerArgs
+            };
+        _ ->
+            #state{pool_id = PoolId}
+    end,
+    {ok, State}.
 
 
 -spec handle_call(Request, From, State) ->  {reply, Reply, State} |
@@ -82,18 +92,8 @@ handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
         pool_opts = OldPoolOpts, worker_args = OldWorkerArgs}) ->
     State2 = case octopus:get_pool_config(PoolId) of
         {PoolId, NewPoolOpts, NewWorkerArgs} ->
-            OldPoolSize = proplists:get_value(pool_size, OldPoolOpts, 0),
-            NewPoolSize = proplists:get_value(pool_size, NewPoolOpts, 0),
-            %% PoolSizeChange
-            ok = pool_size_change(PoolId, OldPoolSize, NewPoolSize),
-            %% WorkerConfigChange
-            OldWorkerModule = proplists:get_value(worker, OldPoolOpts),
-            NewWorkerModule = proplists:get_value(worker, NewPoolOpts),
-            WorkerModuleChanged = NewWorkerModule =/= OldWorkerModule,
-            WorkerArgsChanged = NewWorkerArgs =/= OldWorkerArgs,
-            WorkerConfigChanged = WorkerModuleChanged orelse WorkerArgsChanged,
-            _ = [octopus_pool_workers_sup:restart_worker(PoolId, WorkerId)
-                || WorkerId <- lists:seq(1, NewPoolSize), WorkerConfigChanged],
+            ok = config_change(PoolId, OldPoolOpts, OldWorkerArgs,
+                NewPoolOpts, NewWorkerArgs),
             State#state{pool_opts = NewPoolOpts, worker_args = NewWorkerArgs};
         _ ->
             State
@@ -135,6 +135,21 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% internal
+config_change(PoolId, OldPoolOpts, OldWorkerArgs, NewPoolOpts, NewWorkerArgs) ->
+    OldPoolSize = proplists:get_value(pool_size, OldPoolOpts, 0),
+    NewPoolSize = proplists:get_value(pool_size, NewPoolOpts, 0),
+    %% PoolSizeChange
+    ok = pool_size_change(PoolId, OldPoolSize, NewPoolSize),
+    %% WorkerConfigChange
+    OldWorkerModule = proplists:get_value(worker, OldPoolOpts),
+    NewWorkerModule = proplists:get_value(worker, NewPoolOpts),
+    WorkerModuleChanged = NewWorkerModule =/= OldWorkerModule,
+    WorkerArgsChanged = NewWorkerArgs =/= OldWorkerArgs,
+    WorkerConfigChanged = WorkerModuleChanged orelse WorkerArgsChanged,
+    _ = [octopus_pool_workers_sup:restart_worker(PoolId, WorkerId)
+        || WorkerId <- lists:seq(1, NewPoolSize), WorkerConfigChanged],
+    ok.
+
 pool_size_change(PoolId, OldSize, NewSize) when OldSize =< NewSize ->
     %% when OldSize less or equal NewSize then try to start new workers
     [begin
