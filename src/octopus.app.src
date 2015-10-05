@@ -9,5 +9,8 @@
 		stdlib
 	]},
 	{mod, {octopus_app, []}},
-	{env, []}
+	{env, [
+        {pools, []},
+        {groups, []}
+    ]}
 ]}.

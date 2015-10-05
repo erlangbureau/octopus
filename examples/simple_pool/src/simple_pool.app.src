@@ -1,0 +1,15 @@
+{application, simple_pool, [
+	{description, ""},
+	{vsn, "0.1.0"},
+	{id, "git"},
+	{modules, []},
+	{registered, []},
+	{applications, [
+		kernel,
+		stdlib,
+        octopus,
+        jamdb_sybase
+	]},
+	{mod, {simple_pool_app, []}},
+	{env, []}
+]}.
