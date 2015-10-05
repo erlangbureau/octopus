@@ -18,7 +18,7 @@ $ ./_rel/simple_pool_example/bin/simple_pool_example console
 Example output
 --------------
 
-``` bash
+```
 Pool Info before lockout: [{init,0},{ready,3},{busy,0}]
 Pool Info after lockout: [{init,0},{ready,2},{busy,1}]
 
