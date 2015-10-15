@@ -34,6 +34,13 @@ ok
 
 ```
 
+Alternatives
+============
+* [poolboy](https://github.com/devinus/poolboy) - A hunky Erlang worker pool factory
+* [pooler](https://github.com/seth/pooler) - An OTP Process Pool Application
+* [episcina](https://github.com/erlware/episcina) - A simple non intrusive resource pool for connections
+ 
+
 Project Chat Room
 =================
 [![Gitter](https://badges.gitter.im/Join Chat.svg)](https://gitter.im/erlangbureau/octopus?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
