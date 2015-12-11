@@ -143,8 +143,8 @@ handle_call(worker_lockout, {From, _}, #state{pool_id = PoolId} = State) ->
     Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
     case Ready of
         [{WorkerId, Pid}|Ready2] ->
-            _ = erlang:monitor(process, From),
-            Busy2 = lists:keystore(WorkerId, 1, Busy, {WorkerId, Pid, From}),
+            Monitor = erlang:monitor(process, From),
+            Busy2 = lists:keystore(WorkerId, 1, Busy, {WorkerId, Pid, From, Monitor}),
             ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
             ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2),
             {reply, {ok, Pid}, State};
@@ -178,7 +178,8 @@ handle_cast({worker_lockin, From}, #state{pool_id = PoolId} = State) ->
     Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
     Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
     case lists:keytake(From, 3, Busy) of
-        {value, {WorkerId, Pid, From}, Busy2} ->
+        {value, {WorkerId, Pid, From, Monitor}, Busy2} ->
+            true = erlang:demonitor(Monitor),
             Ready2 = lists:keystore(WorkerId, 1, Ready, {WorkerId, Pid}),
             ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
             ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2);
@@ -239,13 +240,13 @@ handle_info({ready, WorkerId}, #state{pool_id = PoolId} = State) ->
             ok
     end,
     {noreply, State};
-handle_info({'DOWN', _MonitorRef, process, Pid, _Info},
+handle_info({'DOWN', MonitorRef, process, Pid, _Info},
         #state{pool_id = PoolId} = State) ->
     Ready = octopus_pool_workers_cache:lookup({PoolId, ready}),
     Busy = octopus_pool_workers_cache:lookup({PoolId, busy}),
     case lists:keytake(Pid, 3, Busy) of
         {value, Tuple, Busy2} ->
-            {WorkerId, WorkerPid, Pid} = Tuple,
+            {WorkerId, WorkerPid, Pid, MonitorRef} = Tuple,
             Ready2 = lists:keystore(WorkerId, 1, Ready, {WorkerId, WorkerPid}),
             ok = octopus_pool_workers_cache:insert({PoolId, ready}, Ready2),
             ok = octopus_pool_workers_cache:insert({PoolId, busy}, Busy2);
