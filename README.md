@@ -39,7 +39,8 @@ Alternatives
 * [poolboy](https://github.com/devinus/poolboy) - A hunky Erlang worker pool factory
 * [pooler](https://github.com/seth/pooler) - An OTP Process Pool Application
 * [episcina](https://github.com/erlware/episcina) - A simple non intrusive resource pool for connections
- 
+* [cuesport](https://github.com/goj/cuesport) - Simple Erlang pool of workers
+* [worker_pool](https://github.com/inaka/worker_pool) - Erlang worker pool
 
 Project Chat Room
 =================
