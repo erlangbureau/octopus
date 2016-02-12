@@ -1,6 +1,6 @@
 {application, octopus, [
     {description, "Small and flexible pool manager"},
-    {vsn, "1.0.0"},
+    {vsn, "1.0.2"},
     {id, "git"},
     {modules, []},
     {registered, []},

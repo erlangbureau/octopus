@@ -147,7 +147,7 @@ config_change(PoolId, OldPoolOpts, OldWorkerArgs, NewPoolOpts, NewWorkerArgs) ->
     WorkerArgsChanged = NewWorkerArgs =/= OldWorkerArgs,
     WorkerConfigChanged = WorkerModuleChanged orelse WorkerArgsChanged,
     _ = [octopus_pool_workers_sup:restart_worker(PoolId, WorkerId)
-        || WorkerId <- lists:seq(1, NewPoolSize), WorkerConfigChanged],
+        || WorkerId <- lists:seq(1, OldPoolSize), WorkerConfigChanged],
     ok.
 
 pool_size_change(PoolId, OldSize, NewSize) when OldSize =< NewSize ->
