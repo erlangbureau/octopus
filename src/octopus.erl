@@ -1,15 +1,19 @@
 -module(octopus).
 
-%% API
--export([start_pool/3, stop_pool/1]).
--export([worker_lockout/1, worker_lockin/1]).
--export([perform/2]).
+% API
+-export([start_pool/3]).
+-export([stop_pool/1]).
+-export([worker_lockout/1, worker_lockout/2]).
+-export([worker_lockin/1]).
+-export([perform/2, perform/3]).
 -export([get_pool_config/1, set_pool_config/3, set_pool_config/4]).
 -export([pool_info/1, pool_info/2]).
 -export([get_group/1, set_group/2]).
 -export([map/2, reduce/3]).
 
-%% API
+-define(DEFAULT_TIMEOUT, 5000).
+
+% API
 -spec start_pool(PoolId, PoolOpts, WorkerArgs) -> ok | {error, Reason}
 when
     PoolId      :: atom(),
@@ -18,7 +22,7 @@ when
     Reason      :: term().
 
 start_pool(PoolId, PoolOpts, WorkerArgs) when
-        is_list(PoolOpts), is_list(WorkerArgs) ->
+        is_atom(PoolId), is_list(PoolOpts), is_list(WorkerArgs) ->
     ok = add_pool_config(PoolId, PoolOpts, WorkerArgs),
     case octopus_sup:start_pool(PoolId) of
         {ok, _Pid}                          -> ok;
@@ -32,18 +36,18 @@ start_pool(PoolId, PoolOpts, WorkerArgs) when
 when
     PoolId  :: atom().
 
-stop_pool(PoolId) ->
+stop_pool(PoolId) when is_atom(PoolId) ->
     _ = octopus_sup:stop_pool(PoolId),
     _ = delete_pool_config(PoolId),
     ok.
 
 
--spec pool_info(PoolId) -> [{Item, non_neg_integer()}]
+-spec pool_info(PoolId) -> #{Item => non_neg_integer()}
 when
-    PoolId      :: atom(),
+    PoolId  :: atom(),
     Item    :: init | ready | busy.
 
-pool_info(PoolId) ->
+pool_info(PoolId) when is_atom(PoolId) ->
     octopus_pool_task_server:pool_info(PoolId).
 
 
@@ -52,8 +56,9 @@ when
     PoolId  :: atom(),
     Item    :: init | ready | busy.
 
-pool_info(PoolId, Item) ->
-    octopus_pool_task_server:pool_info(PoolId, Item).
+pool_info(PoolId, Item) when is_atom(PoolId) ->
+    Info = octopus_pool_task_server:pool_info(PoolId),
+    maps:get(Item, Info).
 
 
 -spec worker_lockout(PoolId) -> {ok, Pid} | {error, Reason}
@@ -62,15 +67,25 @@ when
     Pid     :: pid(),
     Reason  :: term().
 
-worker_lockout(PoolId) ->
-   octopus_pool_task_server:worker_lockout(PoolId).
+worker_lockout(PoolId) when is_atom(PoolId) ->
+   worker_lockout(PoolId, ?DEFAULT_TIMEOUT).
+
+-spec worker_lockout(PoolId, Timeout) -> {ok, Pid} | {error, Reason}
+when
+    PoolId  :: atom(),
+    Timeout :: timeout(),
+    Pid     :: pid(),
+    Reason  :: term().
+
+worker_lockout(PoolId, Timeout) when is_atom(PoolId) ->
+   octopus_pool_task_server:worker_lockout(PoolId, Timeout).
 
 
 -spec worker_lockin(PoolId) -> ok
 when
     PoolId  :: atom().
 
-worker_lockin(PoolId) ->
+worker_lockin(PoolId) when is_atom(PoolId) ->
    octopus_pool_task_server:worker_lockin(PoolId).
 
 
@@ -81,8 +96,19 @@ when
     FunResult   :: term(),
     Reason      :: term().
 
-perform(PoolId, Fun) ->
-    case worker_lockout(PoolId) of
+perform(PoolId, Fun) when is_atom(PoolId) ->
+    perform(PoolId, Fun, ?DEFAULT_TIMEOUT).
+
+-spec perform(PoolId, Fun, Timeout) -> FunResult | {error, Reason}
+when
+    PoolId      :: atom(),
+    Fun         :: fun((pid()) -> term()),
+    Timeout     :: timeout(),
+    FunResult   :: term(),
+    Reason      :: term().
+
+perform(PoolId, Fun, Timeout) ->
+    case worker_lockout(PoolId, Timeout) of
         {ok, Pid} ->
             try
                 Fun(Pid)
@@ -99,8 +125,8 @@ when
     PoolId  :: atom(),
     Tuple   :: tuple().
 
-get_pool_config(PoolId) ->
-    Pools = get_env(pools, []),
+get_pool_config(PoolId) when is_atom(PoolId) ->
+    Pools = application:get_env(?MODULE, pools, []),
     lists:keyfind(PoolId, 1, Pools).
 
 
@@ -110,7 +136,7 @@ when
     PoolOpts    :: proplists:proplist(),
     WorkerArgs  :: proplists:proplist().
 
-set_pool_config(PoolId, PoolOpts, WorkerArgs) ->
+set_pool_config(PoolId, PoolOpts, WorkerArgs) when is_atom(PoolId) ->
     set_pool_config(PoolId, PoolOpts, WorkerArgs, []).
 
 
@@ -121,7 +147,7 @@ when
     WorkerArgs  :: proplists:proplist(),
     ChangeOpts  :: proplists:proplist().
 
-set_pool_config(PoolId, PoolOpts, WorkerArgs, ChangeOpts) ->
+set_pool_config(PoolId, PoolOpts, WorkerArgs, ChangeOpts) when is_atom(PoolId) ->
     ok = add_pool_config(PoolId, PoolOpts, WorkerArgs),
     octopus_pool_config_server:config_change(PoolId, ChangeOpts).
 
@@ -131,7 +157,7 @@ set_pool_config(PoolId, PoolOpts, WorkerArgs, ChangeOpts) ->
     PoolList    :: list().
 
 get_group(GroupId) ->
-    Groups = get_env(groups, []),
+    Groups = application:get_env(?MODULE, groups, []),
     proplists:get_value(GroupId, Groups, []).
 
 
@@ -140,9 +166,9 @@ get_group(GroupId) ->
     PoolList    :: list().
 
 set_group(GroupId, PoolList) ->
-    Groups = get_env(groups, []),
+    Groups = application:get_env(?MODULE, groups, []),
     Groups2 = lists:keystore(GroupId, 1, Groups, {GroupId, PoolList}),
-    set_env(groups, Groups2).
+    application:set_env(?MODULE, groups, Groups2).
 
 
 -spec map(GroupId, Fun) -> list() when
@@ -150,7 +176,7 @@ set_group(GroupId, PoolList) ->
     PoolId  :: atom(),
     Fun     :: fun((PoolId) -> term()).
 
-map(GroupId, Fun) ->
+map(GroupId, Fun) when is_function(Fun) ->
     PoolList = get_group(GroupId),
     [Fun(PoolId) || PoolId <- PoolList].
 
@@ -160,27 +186,18 @@ map(GroupId, Fun) ->
     InitState   :: term(),
     Fun         :: fun((PoolId, InitState) -> term()).
 
-reduce(GroupId, Fun, InitState) ->
+reduce(GroupId, Fun, InitState) when is_function(Fun) ->
     PoolList = get_group(GroupId),
     lists:foldl(Fun, InitState, PoolList).
 
-%% internal
+% internal
 add_pool_config(PoolId, PoolOpts, WorkerArgs) ->
-    Pools = get_env(pools, []),
+    Pools = application:get_env(?MODULE, pools, []),
     PoolCfg = {PoolId, PoolOpts, WorkerArgs},
     Pools2 = lists:keystore(PoolId, 1, Pools, PoolCfg),
-    set_env(pools, [PoolCfg|Pools2]).
+    application:set_env(?MODULE, pools, Pools2).
 
 delete_pool_config(PoolId) ->
-    Pools = get_env(pools, []),
+    Pools = application:get_env(?MODULE, pools, []),
     Pools2 = lists:keydelete(PoolId, 1, Pools),
-    set_env(pools, Pools2).
-
-get_env(Key, Default) ->
-    case application:get_env(?MODULE, Key) of
-        {ok, Value} -> Value;
-        undefined -> Default
-    end.
-
-set_env(Key, Value) ->
-    application:set_env(?MODULE, Key, Value).
+    application:set_env(?MODULE, pools, Pools2).
