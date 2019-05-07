@@ -1,16 +1,11 @@
 {application, octopus, [
     {description, "Small and flexible pool manager"},
     {vsn, "1.0.2"},
-    {id, "git"},
     {modules, []},
     {registered, []},
     {applications, [
         kernel,
         stdlib
     ]},
-    {mod, {octopus_app, []}},
-    {env, [
-        {pools, []},
-        {groups, []}
-    ]}
+    {mod, {octopus_app, []}}
 ]}.
