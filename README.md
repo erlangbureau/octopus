@@ -41,8 +41,3 @@ Alternatives
 * [episcina](https://github.com/erlware/episcina) - A simple non intrusive resource pool for connections
 * [cuesport](https://github.com/goj/cuesport) - Simple Erlang pool of workers
 * [worker_pool](https://github.com/inaka/worker_pool) - Erlang worker pool
-
-Project Chat Room
-=================
-[![Gitter](https://badges.gitter.im/Join Chat.svg)](https://gitter.im/erlangbureau/octopus?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
