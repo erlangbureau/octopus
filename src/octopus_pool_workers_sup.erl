@@ -17,7 +17,8 @@ when
     Pid     :: pid().
 
 start_link(PoolId) ->
-    supervisor:start_link(?MODULE, [PoolId]).
+    SupName = octopus_name_resolver:get(PoolId, ?MODULE),
+    supervisor:start_link({local, SupName}, ?MODULE, []).
 
 
 -spec start_worker(PoolId, WorkerId) -> ok
@@ -26,11 +27,11 @@ when
     WorkerId    :: term().
 
 start_worker(PoolId, WorkerId) ->
-    {ok, SupPid} = octopus_pool_processes_cache:lookup({?MODULE, PoolId}),
+    SupName = octopus_name_resolver:get(PoolId, ?MODULE),
     Spec = {WorkerId,
         {octopus_pool_task_server, worker_start, [PoolId, WorkerId]},
         transient, 1000, worker, [octopus_pool_task_server]},
-    {ok, _} = supervisor:start_child(SupPid, Spec),
+    {ok, _} = supervisor:start_child(SupName, Spec),
     ok.
 
 
@@ -41,9 +42,9 @@ when
     WorkerId    :: term().
 
 stop_worker(PoolId, WorkerId) ->
-    {ok, SupPid} = octopus_pool_processes_cache:lookup({?MODULE, PoolId}),
-    _ = supervisor:terminate_child(SupPid, WorkerId),
-    _ = supervisor:delete_child(SupPid, WorkerId),
+    SupName = octopus_name_resolver:get(PoolId, ?MODULE),
+    _ = supervisor:terminate_child(SupName, WorkerId),
+    _ = supervisor:delete_child(SupName, WorkerId),
     ok.
 
 
@@ -68,7 +69,6 @@ when
     MaxT        :: pos_integer(),
     ChildSpec   :: supervisor:child_spec().
 
-init([PoolId]) ->
-    ok = octopus_pool_processes_cache:register({?MODULE, PoolId}),
+init([]) ->
     Procs = [],
     {ok, {{one_for_one, 100, 1}, Procs}}.

@@ -23,7 +23,8 @@ when
     Pid     :: pid().
 
 start_link(PoolId) ->
-    gen_server:start_link(?MODULE, [PoolId], []).
+    ServerName = octopus_name_resolver:get(PoolId, ?MODULE),
+    gen_server:start_link({local, ServerName}, ?MODULE, [PoolId], []).
 
 
 -spec config_change(PoolId, Opts) -> ok
@@ -32,22 +33,11 @@ when
     Opts    :: proplists:proplist().
 
 config_change(PoolId, Opts) ->
-    {ok, ServerPid} = octopus_pool_processes_cache:lookup({?MODULE, PoolId}),
-    gen_server:cast(ServerPid, {config_change, Opts}).
+    ServerName = octopus_name_resolver:get(PoolId, ?MODULE),
+    gen_server:cast(ServerName, {config_change, Opts}).
 
 %% gen_server callbacks
--spec init(Opts) -> {ok, State} |
-                    {ok, State, Timeout} |
-                    ignore |
-                    {stop, Reason}
-when
-    Opts    :: list(),
-    State   :: term(),
-    Timeout :: timeout(),
-    Reason  :: term().
-
 init([PoolId]) ->
-    ok = octopus_pool_processes_cache:register({?MODULE, PoolId}),
     State = case octopus:get_pool_config(PoolId) of
         {PoolId, PoolOpts, WorkerArgs} ->
             ok = config_change(PoolId, [], [], PoolOpts, WorkerArgs),
@@ -61,32 +51,8 @@ init([PoolId]) ->
     end,
     {ok, State}.
 
-
--spec handle_call(Request, From, State) ->  {reply, Reply, State} |
-                                            {reply, Reply, State, Timeout} |
-                                            {noreply, State} |
-                                            {noreply, State, Timeout} |
-                                            {stop, Reason, Reply, State}
-when
-    Request :: term(),
-    From    :: {pid(), term()},
-    State   :: term(),
-    Reply   :: term(),
-    Timeout :: timeout(),
-    Reason  :: normal | shutdown.
-
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
-
-
--spec handle_cast(Request, State) ->    {noreply, State} |
-                                        {noreply, State, Timeout} |
-                                        {stop, Reason, State}
-when
-    Request :: term(),
-    State   :: term(),
-    Timeout :: timeout(),
-    Reason  :: normal | shutdown.
 
 handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
         pool_opts = OldPoolOpts, worker_args = OldWorkerArgs}) ->
@@ -102,34 +68,11 @@ handle_cast({config_change, _Opts}, State = #state{pool_id = PoolId,
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-
--spec handle_info(Request, State) ->    {noreply, State} |
-                                        {noreply, State, Timeout} |
-                                        {stop, Reason, State}
-when
-    Request :: term(),
-    State   :: term(),
-    Timeout :: timeout(),
-    Reason  :: normal | shutdown.
-
 handle_info(_Info, State) ->
     {noreply, State}.
 
-
--spec terminate(Reason, State) -> ok
-when
-    Reason  :: term(),
-    State   :: term().
-
 terminate(_Reason, _State) ->
     ok.
-
--spec code_change(OldVsn, State, Extra) -> {ok, State} | {error, Reason}
-when
-    OldVsn  :: term() | {down, term()},
-    State   :: term(),
-    Extra   :: term(),
-    Reason  :: term().
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
