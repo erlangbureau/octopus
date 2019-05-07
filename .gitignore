@@ -1,0 +1,5 @@
+ebin/
+.erlang.mk/
+*.plt
+octopus.d
+xrefr
